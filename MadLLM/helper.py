@@ -8,7 +8,6 @@ from pathlib import Path
 
 tokenizer = tiktoken.get_encoding("gpt2")
 
-#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
 
 vocab_size = tokenizer.n_vocab
 num_transformer_blocks = 6
