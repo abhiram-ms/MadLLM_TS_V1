@@ -1,12 +1,8 @@
 ---
-title: MadLLM_TS_V1
-emoji: 🐸
-colorFrom: green
-colorTo: blue
-sdk: gradio
+title: MADLLM_TS_V1
 app_file: app.py
-python_version: 3.11
-pinned: false
+sdk: gradio
+sdk_version: 6.19.0
 ---
 
 # MadLLM TinyStories

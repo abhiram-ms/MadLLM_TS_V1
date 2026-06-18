@@ -32,18 +32,21 @@ model = MadLLM(
 # -------------------------
 # Load Orbax checkpoint
 # -------------------------
-checkpoint_path = Path("small_checkpoint.orbax")
+checkpoint_path = (Path(__file__).parent / "small_checkpoint.orbax").resolve()
+
+print("Loading checkpoint from:", checkpoint_path)
 
 if not checkpoint_path.exists():
     raise FileNotFoundError(
-        "small_checkpoint.orbax not found. Make sure it is uploaded with the Space."
+        f"Checkpoint not found at: {checkpoint_path}"
     )
 
 checkpointer = checkpoint.PyTreeCheckpointer()
 
 state = nnx.state(model)
+
 restored_state = checkpointer.restore(
-    str(checkpoint_path),
+    checkpoint_path.as_posix(),
     item=state
 )
 
@@ -94,8 +97,8 @@ demo = gr.Interface(
         )
     ],
     outputs=gr.Textbox(label="Generated Story"),
-    title="MadLLM TinyStories",
-    description="A tiny from-scratch JAX/Flax language model trained on TinyStories."
+    title="MadLLM_TS_V1",
+    description="A tiny from-scratch JAX/Flax language model trained on TinyStories and NFT datasets for npc."
 )
 
 demo.launch()
