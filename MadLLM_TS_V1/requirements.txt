@@ -1,6 +1,5 @@
-gradio
 jax[cpu]
 flax
-orbax-checkpoint
 tiktoken
 numpy
+#orbax-checkpoint

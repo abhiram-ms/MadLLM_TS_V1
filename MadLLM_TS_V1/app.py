@@ -1,9 +1,34 @@
+#app.py
+
 import json
 from pathlib import Path
 
+#disable gradio's SSR mode to avoid issues with JAX/Flax state management in the UI
+import os
+os.environ["GRADIO_SSR_MODE"] = "False"
+
+# Suppress harmless asyncio cleanup noise on Hugging Face Spaces.
+try:
+    import asyncio.base_events as base_events
+
+    original_del = getattr(base_events.BaseEventLoop, "__del__", None)
+
+    if original_del is not None:
+        def patched_del(self):
+            try:
+                original_del(self)
+            except ValueError as e:
+                if "Invalid file descriptor" not in str(e):
+                    raise
+
+        base_events.BaseEventLoop.__del__ = patched_del
+except Exception:
+    pass
+
 import gradio as gr
 import flax.nnx as nnx
-from orbax import checkpoint
+#from orbax import checkpoint
+from flax import serialization
 
 from inference_helper import MadLLM, generate_story
 
@@ -30,27 +55,36 @@ model = MadLLM(
 
 
 # -------------------------
-# Load Orbax checkpoint
+# Load msgpack checkpoint
 # -------------------------
-checkpoint_path = (Path(__file__).parent / "small_checkpoint.orbax").resolve()
+checkpoint_path = (Path(__file__).parent / "madllm_state.msgpack").resolve()
 
-print("Loading checkpoint from:", checkpoint_path)
+print("Loading model state from:", checkpoint_path)
 
 if not checkpoint_path.exists():
     raise FileNotFoundError(
-        f"Checkpoint not found at: {checkpoint_path}"
+        f"madllm_state.msgpack not found at: {checkpoint_path}"
     )
-
-checkpointer = checkpoint.PyTreeCheckpointer()
 
 state = nnx.state(model)
 
-restored_state = checkpointer.restore(
-    checkpoint_path.as_posix(),
-    item=state
+pure_state_template = nnx.to_pure_dict(state)
+
+restored_pure_state = serialization.from_bytes(
+    pure_state_template,
+    checkpoint_path.read_bytes()
 )
 
-nnx.update(model, restored_state)
+restored_pure_state = nnx.restore_int_paths(restored_pure_state)
+
+# IMPORTANT:
+# This modifies `state` in-place and returns None.
+nnx.replace_by_pure_dict(state, restored_pure_state)
+
+# Now update model using the modified state.
+nnx.update(model, state)
+
+print("Model loaded successfully from msgpack.")
 
 
 # -------------------------
@@ -101,4 +135,8 @@ demo = gr.Interface(
     description="A tiny from-scratch JAX/Flax language model trained on TinyStories and NFT datasets for npc."
 )
 
-demo.launch()
+demo.queue().launch(
+    server_name="0.0.0.0",
+    server_port=7860,
+    ssr_mode=False
+)

@@ -85,23 +85,73 @@ class TokenAndPositionEmbedding(nnx.Module):
         seq_len = x.shape[1]
         positions = jnp.arange(seq_len)[None, :]
         return self.token_emb(x) + self.pos_emb(positions)
+    
+#--------------Transformer Block ----------------------------------
 
 class TransformerBlock(nnx.Module):
+    def __init__(
+        self,
+        embed_dim,
+        num_heads,
+        ff_dim=None,
+        dropout_rate=0.0,
+        *,
+        rngs
+    ):
+        # CPU friendly default: smaller FFN
+        if ff_dim is None:
+            ff_dim = embed_dim * 2
 
-    def __init__(self, embed_dim, num_heads, ff_dim, *, rngs):
+        self.ln1 = nnx.LayerNorm(embed_dim, rngs=rngs)
+
         self.attention = nnx.MultiHeadAttention(
             num_heads=num_heads,
             in_features=embed_dim,
             qkv_features=embed_dim,
             out_features=embed_dim,
+            dropout_rate=dropout_rate,
             decode=False,
             rngs=rngs
         )
-        
+
+        self.dropout1 = nnx.Dropout(dropout_rate, rngs=rngs)
+
+        self.ln2 = nnx.LayerNorm(embed_dim, rngs=rngs)
+
+        self.ff1 = nnx.Linear(
+            in_features=embed_dim,
+            out_features=ff_dim,
+            rngs=rngs
+        )
+
+        self.ff2 = nnx.Linear(
+            in_features=ff_dim,
+            out_features=embed_dim,
+            rngs=rngs
+        )
+
+        self.dropout2 = nnx.Dropout(dropout_rate, rngs=rngs)
+
     def __call__(self, x, mask=None):
-        attn_out = self.attention(x, mask=mask)
+        # Pre-normalization attention block
+        attn_input = self.ln1(x)
+        attn_out = self.attention(attn_input, mask=mask)
+        attn_out = self.dropout1(attn_out)
+
         x = x + attn_out
+
+        # Feed-forward block
+        ff_input = self.ln2(x)
+        ff_out = self.ff1(ff_input)
+        ff_out = jax.nn.gelu(ff_out, approximate=True)
+        ff_out = self.ff2(ff_out)
+        ff_out = self.dropout2(ff_out)
+
+        x = x + ff_out
+
         return x
+    
+#------------------------------MadLLM Model Definition ----------------------------------
     
 class MadLLM(nnx.Module):
 
